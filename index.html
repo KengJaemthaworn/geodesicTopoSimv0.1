@@ -227,8 +227,8 @@
                 </div>
                 
                 <div class="action-buttons" style="border-top: none; padding-top: 0; margin-top: 10px;">
-                    <button id="spawn-btn">Drop Cell (Random High Potency)</button>
-                    <button id="spawn-scatter-btn" style="background-color: #5bc0de;">Spawn Batch (Stochastic)</button>
+                    <button id="spawn-btn">Drop Cell (Gaussian Spread)</button>
+                    <button id="spawn-scatter-btn" style="background-color: #5bc0de;">Spawn Batch (Gaussian Batch)</button>
                     <button id="reset-btn" class="btn-reset">Clear Cells</button>
                 </div>
             </div>
@@ -236,6 +236,16 @@
     </div>
 
     <script>
+        // --- 0. HELPER: GAUSSIAN DISTRIBUTION ---
+        // ใช้ Box-Muller transform เพื่อสร้างการกระจายตัวแบบระฆังคว่ำ (Normal Distribution)
+        // แทนการสุ่มแบบกระจายตัวเท่ากัน (Uniform) ยิ่งไกลจากศูนย์กลาง โอกาสเกิดยิ่งน้อยลง
+        function randomGaussian() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); 
+            while(v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
         // --- 1. SETUP THREE.JS SCENE ---
         let isDarkMode = false;
         const container = document.getElementById('canvas-container');
@@ -401,13 +411,12 @@
             return { dx: dy_dx, dz: dy_dz };
         }
 
-        function spawnCell(xPos, zPos, isStochastic = false) {
+        // อัปเดตฟังก์ชันให้อ่านค่าตำแหน่งตรงๆ ไม่มีการสุ่มแฝงข้างในอีกต่อไป
+        // เพราะเราจะคำนวณ Gaussian Distribution เสร็จก่อนส่งเข้ามาที่นี่
+        function spawnCell(startX, startZ) {
             const mat = cellMaterial.clone();
             mat.color.setHex(isDarkMode ? 0xffffff : 0x333333);
             const cellMesh = new THREE.Mesh(cellGeometry, mat);
-            
-            const startX = isStochastic ? xPos + (Math.random() - 0.5) * 1.5 : xPos;
-            const startZ = isStochastic ? zPos + (Math.random() - 0.5) * 1.5 : zPos;
             
             scene.add(cellMesh);
             
@@ -493,14 +502,14 @@
             });
         });
 
-        // Waddington Preset - FIXED: Cleaned up to be a true forward-facing funnel
+        // Waddington Preset
         document.getElementById('preset-waddington-btn').addEventListener('click', () => {
             landscapeStates = [
-                { id: 1, x: 50, y: 10, z: 10, w: 40 },  // Massive Repeller at the back (Spawns near here)
-                { id: 2, x: 25, y: 75, z: -10, w: 40 }, // Valley A (Deep & Wide)
-                { id: 3, x: 75, y: 75, z: -10, w: 40 }, // Valley B (Deep & Wide)
-                { id: 4, x: 50, y: 50, z: 3, w: 25 },   // Bifurcation Ridge (Splits the path)
-                { id: 5, x: 50, y: 100, z: 8, w: 60 }   // Bottom Catcher Wall (Prevents falling off the front)
+                { id: 1, x: 50, y: 10, z: 10, w: 40 },  
+                { id: 2, x: 25, y: 75, z: -10, w: 40 }, 
+                { id: 3, x: 75, y: 75, z: -10, w: 40 }, 
+                { id: 4, x: 50, y: 50, z: 3, w: 25 },   
+                { id: 5, x: 50, y: 100, z: 8, w: 60 }   
             ];
             nextStateId = 6;
             renderStateUI();
@@ -602,27 +611,33 @@
             document.getElementById('noise-val').innerText = noiseSetting.toFixed(2);
         });
 
-        // FIX: คำนวณเวกเตอร์พุ่งเข้าหาศูนย์กลาง (0,0) และขยับจุดปล่อยลงมาตามสโลปเสมอ (จำลอง Primed State)
+        // -------------------------------------------------------------
+        // NEW SPAWN LOGIC: NUDGE + GAUSSIAN DISTRIBUTION
+        // -------------------------------------------------------------
+        
         document.getElementById('spawn-btn').addEventListener('click', () => {
             let highPotency = landscapeStates.reduce((prev, current) => (prev.z > current.z) ? prev : current, {x: 50, y: 50, z: 0});
             const mappedX = (highPotency.x / 100) * 30 - 15;
             const mappedZ = (highPotency.y / 100) * 30 - 15;
             
-            // คำนวณเวกเตอร์ทิศทางพุ่งเข้าหาจุดกึ่งกลาง (0,0)
             let dirX = 0 - mappedX;
             let dirZ = 0 - mappedZ;
             let len = Math.sqrt(dirX * dirX + dirZ * dirZ);
             
-            let spawnX = mappedX;
-            let spawnZ = mappedZ;
+            let spawnBaseX = mappedX;
+            let spawnBaseZ = mappedZ;
             
-            // ขยับจุดปล่อยลงมาตามสโลป 2.5 หน่วย เพื่อหนียอดเขาที่แบนราบ (Gradient = 0)
+            // ขยับ Nudge เข้าหาศูนย์กลางเล็กน้อย เพื่อให้ตั้งต้นบนสโลปที่ถูกต้อง
             if (len > 0) {
-                spawnX += (dirX / len) * 2.5;
-                spawnZ += (dirZ / len) * 2.5;
+                spawnBaseX += (dirX / len) * 1.5;
+                spawnBaseZ += (dirZ / len) * 1.5;
             }
             
-            spawnCell(spawnX, spawnZ);
+            // ใส่ Gaussian Spread (ระยะแกว่ง = 1.0)
+            let finalX = spawnBaseX + randomGaussian() * 1.0;
+            let finalZ = spawnBaseZ + randomGaussian() * 1.0;
+            
+            spawnCell(finalX, finalZ);
         });
 
         document.getElementById('spawn-scatter-btn').addEventListener('click', () => {
@@ -630,22 +645,24 @@
             const mappedX = (highPotency.x / 100) * 30 - 15;
             const mappedZ = (highPotency.y / 100) * 30 - 15;
 
-            // คำนวณเวกเตอร์ทิศทางพุ่งเข้าหาจุดกึ่งกลาง (0,0)
             let dirX = 0 - mappedX;
             let dirZ = 0 - mappedZ;
             let len = Math.sqrt(dirX * dirX + dirZ * dirZ);
             
-            let spawnX = mappedX;
-            let spawnZ = mappedZ;
+            let spawnBaseX = mappedX;
+            let spawnBaseZ = mappedZ;
             
-            // ขยับจุดปล่อยลงมาตามสโลป 2.5 หน่วย
             if (len > 0) {
-                spawnX += (dirX / len) * 2.5;
-                spawnZ += (dirZ / len) * 2.5;
+                spawnBaseX += (dirX / len) * 1.5;
+                spawnBaseZ += (dirZ / len) * 1.5;
             }
 
-            for(let i=0; i<5; i++){
-                spawnCell(spawnX, spawnZ, true);
+            // ปล่อย 10 เซลล์เพื่อให้เห็นระฆังคว่ำ (Gaussian Distribution) ชัดเจน
+            // ค่า 2.0 คือ Standard Deviation ของการกระจาย ยิ่งมากยิ่งกว้าง
+            for(let i=0; i<10; i++){
+                let finalX = spawnBaseX + randomGaussian() * 2.0;
+                let finalZ = spawnBaseZ + randomGaussian() * 2.0;
+                spawnCell(finalX, finalZ);
             }
         });
 
