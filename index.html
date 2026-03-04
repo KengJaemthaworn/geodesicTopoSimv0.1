@@ -265,7 +265,6 @@
         }
         updateCameraPosition();
 
-        // FIX: Only drag if we are NOT clicking inside the UI panels
         document.addEventListener('mousedown', (e) => {
             if (e.target.closest('#parameter-panel') || e.target.closest('#simulate-panel')) return;
             isDragging = true;
@@ -285,7 +284,6 @@
             previousMousePosition = { x: e.offsetX, y: e.offsetY };
         });
         document.addEventListener('wheel', (e) => {
-            // FIX: Don't zoom if scrolling inside the UI panels
             if (e.target.closest('#parameter-panel') || e.target.closest('#simulate-panel')) return;
             camera.position.y += e.deltaY * 0.05;
             camera.position.z += e.deltaY * 0.05;
@@ -293,7 +291,6 @@
         });
 
         // --- 2. MATHEMATICAL LANDSCAPE DEFINITION ---
-        // Added 'w' (width/spread) to each state
         let landscapeStates = [
             { id: 1, x: 20, y: 30, z: 8, w: 15 },   
             { id: 2, x: 80, y: 20, z: 6, w: 15 },   
@@ -307,11 +304,12 @@
             landscapeStates.forEach(state => {
                 const mappedX = (state.x / 100) * 30 - 15;
                 const mappedZ = (state.y / 100) * 30 - 15; 
-                const width = state.w || 15; // Fallback just in case
+                const width = state.w || 15; 
                 y += state.z * Math.exp(-((x - mappedX)**2 + (z - mappedZ)**2) / width);
             });
-            let edgeMaskX = Math.max(0, 1 - Math.pow(x / 14.5, 4));
-            let edgeMaskZ = Math.max(0, 1 - Math.pow(z / 14.5, 4));
+            
+            let edgeMaskX = Math.max(0, 1 - Math.pow(x / 14.5, 12));
+            let edgeMaskZ = Math.max(0, 1 - Math.pow(z / 14.5, 12));
             y *= (edgeMaskX * edgeMaskZ);
             return y;
         }
@@ -391,7 +389,7 @@
         const cells = [];
         const cellGeometry = new THREE.SphereGeometry(0.35, 16, 16);
         const cellMaterial = new THREE.MeshStandardMaterial({
-            color: 0x333333, // Default dark cells for light BG
+            color: 0x333333,
             roughness: 0.2,
             metalness: 0.8
         });
@@ -404,7 +402,6 @@
         }
 
         function spawnCell(xPos, zPos, isStochastic = false) {
-            // Ensure cell colors match current theme
             const mat = cellMaterial.clone();
             mat.color.setHex(isDarkMode ? 0xffffff : 0x333333);
             const cellMesh = new THREE.Mesh(cellGeometry, mat);
@@ -471,7 +468,6 @@
 
         // --- UI Listeners & Presets ---
         
-        // Theme Toggle
         document.getElementById('theme-btn').addEventListener('click', () => {
             isDarkMode = !isDarkMode;
             document.body.classList.toggle('dark-theme', isDarkMode);
@@ -491,22 +487,22 @@
                 btn.style.color = '#fff';
             }
             
-            // Update existing cells/trails to match theme
             cells.forEach(c => {
                 c.mesh.material.color.setHex(isDarkMode ? 0xffffff : 0x333333);
                 c.trail.material.color.setHex(isDarkMode ? 0xaaaaaa : 0x444444);
             });
         });
 
-        // Waddington Preset - FIXED with wide ranges so cells can't escape the network gravity
+        // Waddington Preset - FIXED: Cleaned up to be a true forward-facing funnel
         document.getElementById('preset-waddington-btn').addEventListener('click', () => {
             landscapeStates = [
-                { id: 1, x: 50, y: 15, z: 9, w: 30 },   // Stem cell peak (Wide start)
-                { id: 2, x: 20, y: 85, z: -8, w: 40 },  // Differentiated Lineage A (Massive basin)
-                { id: 3, x: 80, y: 85, z: -8, w: 40 },  // Differentiated Lineage B (Massive basin)
-                { id: 4, x: 50, y: 50, z: 2, w: 20 }    // The Bifurcation Ridge (Forces cells left or right)
+                { id: 1, x: 50, y: 10, z: 10, w: 40 },  // Massive Repeller at the back (Spawns near here)
+                { id: 2, x: 25, y: 75, z: -10, w: 40 }, // Valley A (Deep & Wide)
+                { id: 3, x: 75, y: 75, z: -10, w: 40 }, // Valley B (Deep & Wide)
+                { id: 4, x: 50, y: 50, z: 3, w: 25 },   // Bifurcation Ridge (Splits the path)
+                { id: 5, x: 50, y: 100, z: 8, w: 60 }   // Bottom Catcher Wall (Prevents falling off the front)
             ];
-            nextStateId = 5;
+            nextStateId = 6;
             renderStateUI();
             updateLandscapeGeometry();
         });
@@ -514,14 +510,14 @@
         // Random Preset
         document.getElementById('preset-random-btn').addEventListener('click', () => {
             landscapeStates = [];
-            const numStates = Math.floor(Math.random() * 3) + 3; // 3 to 5 states
+            const numStates = Math.floor(Math.random() * 3) + 3; 
             for(let i=0; i<numStates; i++){
                 landscapeStates.push({
                     id: nextStateId++,
-                    x: Math.floor(Math.random() * 80) + 10, // 10-90 range
+                    x: Math.floor(Math.random() * 80) + 10, 
                     y: Math.floor(Math.random() * 80) + 10,
                     z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 6) + 3),
-                    w: Math.floor(Math.random() * 20) + 10 // Random width 10-30
+                    w: Math.floor(Math.random() * 20) + 10 
                 });
             }
             renderStateUI();
@@ -561,8 +557,8 @@
                     <label>Potency Z (-10 to 10): <span id="val-z-${state.id}">${state.z}</span></label>
                     <input type="range" id="input-z-${state.id}" min="-10" max="10" step="0.5" value="${state.z}">
                     
-                    <label>Width/Spread (5-50): <span id="val-w-${state.id}">${state.w}</span></label>
-                    <input type="range" id="input-w-${state.id}" min="5" max="50" step="1" value="${state.w}">
+                    <label>Width/Spread (5-60): <span id="val-w-${state.id}">${state.w}</span></label>
+                    <input type="range" id="input-w-${state.id}" min="5" max="60" step="1" value="${state.w}">
                 `;
                 
                 container.appendChild(box);
@@ -587,7 +583,7 @@
                 x: Math.floor(Math.random() * 100),
                 y: Math.floor(Math.random() * 100),
                 z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 5) + 3),
-                w: 15 // Default width
+                w: 15 
             });
             renderStateUI();
             updateLandscapeGeometry();
@@ -606,11 +602,27 @@
             document.getElementById('noise-val').innerText = noiseSetting.toFixed(2);
         });
 
+        // FIX: คำนวณเวกเตอร์พุ่งเข้าหาศูนย์กลาง (0,0) และขยับจุดปล่อยลงมาตามสโลปเสมอ (จำลอง Primed State)
         document.getElementById('spawn-btn').addEventListener('click', () => {
             let highPotency = landscapeStates.reduce((prev, current) => (prev.z > current.z) ? prev : current, {x: 50, y: 50, z: 0});
             const mappedX = (highPotency.x / 100) * 30 - 15;
             const mappedZ = (highPotency.y / 100) * 30 - 15;
-            spawnCell(mappedX, mappedZ);
+            
+            // คำนวณเวกเตอร์ทิศทางพุ่งเข้าหาจุดกึ่งกลาง (0,0)
+            let dirX = 0 - mappedX;
+            let dirZ = 0 - mappedZ;
+            let len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+            
+            let spawnX = mappedX;
+            let spawnZ = mappedZ;
+            
+            // ขยับจุดปล่อยลงมาตามสโลป 2.5 หน่วย เพื่อหนียอดเขาที่แบนราบ (Gradient = 0)
+            if (len > 0) {
+                spawnX += (dirX / len) * 2.5;
+                spawnZ += (dirZ / len) * 2.5;
+            }
+            
+            spawnCell(spawnX, spawnZ);
         });
 
         document.getElementById('spawn-scatter-btn').addEventListener('click', () => {
@@ -618,8 +630,22 @@
             const mappedX = (highPotency.x / 100) * 30 - 15;
             const mappedZ = (highPotency.y / 100) * 30 - 15;
 
+            // คำนวณเวกเตอร์ทิศทางพุ่งเข้าหาจุดกึ่งกลาง (0,0)
+            let dirX = 0 - mappedX;
+            let dirZ = 0 - mappedZ;
+            let len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+            
+            let spawnX = mappedX;
+            let spawnZ = mappedZ;
+            
+            // ขยับจุดปล่อยลงมาตามสโลป 2.5 หน่วย
+            if (len > 0) {
+                spawnX += (dirX / len) * 2.5;
+                spawnZ += (dirZ / len) * 2.5;
+            }
+
             for(let i=0; i<5; i++){
-                spawnCell(mappedX, mappedZ, true);
+                spawnCell(spawnX, spawnZ, true);
             }
         });
 
