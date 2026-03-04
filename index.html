@@ -293,11 +293,12 @@
         });
 
         // --- 2. MATHEMATICAL LANDSCAPE DEFINITION ---
+        // Added 'w' (width/spread) to each state
         let landscapeStates = [
-            { id: 1, x: 20, y: 30, z: 8 },   
-            { id: 2, x: 80, y: 20, z: 6 },   
-            { id: 3, x: 60, y: 80, z: -6 },  
-            { id: 4, x: 30, y: 85, z: -4 }   
+            { id: 1, x: 20, y: 30, z: 8, w: 15 },   
+            { id: 2, x: 80, y: 20, z: 6, w: 15 },   
+            { id: 3, x: 60, y: 80, z: -6, w: 20 },  
+            { id: 4, x: 30, y: 85, z: -4, w: 20 }   
         ];
         let nextStateId = 5;
 
@@ -306,7 +307,8 @@
             landscapeStates.forEach(state => {
                 const mappedX = (state.x / 100) * 30 - 15;
                 const mappedZ = (state.y / 100) * 30 - 15; 
-                y += state.z * Math.exp(-((x - mappedX)**2 + (z - mappedZ)**2) / 15);
+                const width = state.w || 15; // Fallback just in case
+                y += state.z * Math.exp(-((x - mappedX)**2 + (z - mappedZ)**2) / width);
             });
             let edgeMaskX = Math.max(0, 1 - Math.pow(x / 14.5, 4));
             let edgeMaskZ = Math.max(0, 1 - Math.pow(z / 14.5, 4));
@@ -496,13 +498,13 @@
             });
         });
 
-        // Waddington Preset
+        // Waddington Preset - FIXED with wide ranges so cells can't escape the network gravity
         document.getElementById('preset-waddington-btn').addEventListener('click', () => {
             landscapeStates = [
-                { id: 1, x: 50, y: 15, z: 9 },   // Stem cell peak
-                { id: 2, x: 20, y: 85, z: -8 },  // Differentiated Lineage A
-                { id: 3, x: 80, y: 85, z: -8 },  // Differentiated Lineage B
-                { id: 4, x: 50, y: 55, z: 3 }    // The Bifurcation Ridge (Saddle point)
+                { id: 1, x: 50, y: 15, z: 9, w: 30 },   // Stem cell peak (Wide start)
+                { id: 2, x: 20, y: 85, z: -8, w: 40 },  // Differentiated Lineage A (Massive basin)
+                { id: 3, x: 80, y: 85, z: -8, w: 40 },  // Differentiated Lineage B (Massive basin)
+                { id: 4, x: 50, y: 50, z: 2, w: 20 }    // The Bifurcation Ridge (Forces cells left or right)
             ];
             nextStateId = 5;
             renderStateUI();
@@ -518,7 +520,8 @@
                     id: nextStateId++,
                     x: Math.floor(Math.random() * 80) + 10, // 10-90 range
                     y: Math.floor(Math.random() * 80) + 10,
-                    z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 6) + 3)
+                    z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 6) + 3),
+                    w: Math.floor(Math.random() * 20) + 10 // Random width 10-30
                 });
             }
             renderStateUI();
@@ -557,11 +560,14 @@
                     
                     <label>Potency Z (-10 to 10): <span id="val-z-${state.id}">${state.z}</span></label>
                     <input type="range" id="input-z-${state.id}" min="-10" max="10" step="0.5" value="${state.z}">
+                    
+                    <label>Width/Spread (5-50): <span id="val-w-${state.id}">${state.w}</span></label>
+                    <input type="range" id="input-w-${state.id}" min="5" max="50" step="1" value="${state.w}">
                 `;
                 
                 container.appendChild(box);
                 
-                ['x', 'y', 'z'].forEach(axis => {
+                ['x', 'y', 'z', 'w'].forEach(axis => {
                     document.getElementById(`input-${axis}-${state.id}`).addEventListener('input', (e) => {
                         const val = parseFloat(e.target.value);
                         document.getElementById(`val-${axis}-${state.id}`).innerText = val;
@@ -580,7 +586,8 @@
                 id: nextStateId++,
                 x: Math.floor(Math.random() * 100),
                 y: Math.floor(Math.random() * 100),
-                z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 5) + 3) 
+                z: (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 5) + 3),
+                w: 15 // Default width
             });
             renderStateUI();
             updateLandscapeGeometry();
